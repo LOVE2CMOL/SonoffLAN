@@ -319,8 +319,12 @@ class XRegistryCloud(ResponseWaiter, XRegistryBase):
             resp = await r.json()
 
             # we can use IP, but using domain because security
+            # heartbeat=90 may cause the frequency of aiohttp's automatic sending of Ping messages to change, 
+            # which may affect the stability of the WebSocket connection. 
+            # It is recommended to still use a boolean value to enable or disable heartbeat messages when setting the heartbeat parameter, 
+            # or to use the PingPong heartbeat manager to customize the heartbeat interval time.
             self.ws = await self.session.ws_connect(
-                f"wss://{resp['domain']}:{resp['port']}/api/ws", heartbeat=90
+                f"wss://{resp['domain']}:{resp['port']}/api/ws", heartbeat=True
             )
 
             # https://coolkit-technologies.github.io/eWeLink-API/#/en/APICenterV2?id=websocket-handshake
@@ -347,25 +351,23 @@ class XRegistryCloud(ResponseWaiter, XRegistryBase):
             # and concatenate it into: "wss://IP:port/api/ws", so as to establish a persistent connection. After the handshake is successful, 
             # you need to send the string "ping" to the server periodically (see the hbInterval field for the interval) to keep the heartbeat, 
             # otherwise the device will be forced to go offline by the server.
-			#            Response example:
-			#            {
-			#			  "error": 0,
-			#			  "apikey": "User APIKEY",
-			#			  "config": {
-			#				"hb": 1,   --Heartbeat interval, in seconds. The client needs to add 7 to this value as the interval to send keep the ping heartbeat alive.If it is not offered, the heartbeat interval will be 90 seconds by default.
-			#				"hbInterval": 145 ---Heartbeat, whether to send heartbeats to keep alive.0: No, 1: Yes
-			#			  },
-			#			  "sequence": "Millisecond-level timestamp , Example: 1571141530100" // Same as sent
-			#			}
-            if "config" in resp:
-                if "hb" in resp["config"] and resp["config"]["hb"] == 1:
-                    self.ws_hb = 1
-                    _LOGGER.debug(f"Cloud WS ws_hb {self.ws_hb}")
-                    if "hbInterval" in resp["config"]:
-                        self.ws_hbInterval = resp["config"]["hbInterval"]
-                        _LOGGER.debug(f"Cloud WS hbInterval {self.ws_hbInterval}")
-                        # self.session._ws_ping_interval = self.ws_hbInterval+7
-                        
+            #            Response example:
+            #            {
+            #			  "error": 0,
+            #			  "apikey": "User APIKEY",
+            #			  "config": {
+            #				"hb": 1,   --Heartbeat interval, in seconds. The client needs to add 7 to this value as the interval to send keep the ping heartbeat alive.If it is not offered, the heartbeat interval will be 90 seconds by default.
+            #				"hbInterval": 145 ---Heartbeat, whether to send heartbeats to keep alive.0: No, 1: Yes
+            #			  },
+            #			  "sequence": "Millisecond-level timestamp , Example: 1571141530100" // Same as sent
+            #			}
+            resp_config = resp.get("config", {})
+            if resp_config.get("hb", 0) == 1:
+                self.ws_hb = 1
+                _LOGGER.debug(f"Cloud WS ws_hb {self.ws_hb}")
+                self.ws_hbInterval = resp_config.get("hbInterval", self.ws_hbInterval)
+                _LOGGER.debug(f"Cloud WS hbInterval {self.ws_hbInterval}")
+                                    
             return True
 
         except ClientConnectorError as e:
